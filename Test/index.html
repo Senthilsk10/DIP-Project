@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Classifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+</head>
+<body>
+  <h1>Image Classifier</h1>
+  
+  <input type="file" id="imageUpload" multiple onchange="classifyUploadedImage()" />
+  <div id="result"></div>
+  
+  <script>
+    // Assuming classLabelsMap is saved from training
+    const classLabelsMap = {
+      "apple": 0,
+      "tomato": 1,
+    };
+
+    // Load the model
+    async function loadModel() {
+      const model = await tf.loadLayersModel('http://127.0.0.1:8000/mymodel.json');
+      console.log('Model loaded successfully');
+      return model;
+    }
+
+    // Preprocess the image (resize, normalize)
+    async function preprocessImage(file) {
+      const img = document.createElement('img');
+      const url = URL.createObjectURL(file);
+
+      return new Promise((resolve) => {
+        img.onload = () => {
+          const tensor = tf.browser
+            .fromPixels(img)
+            .resizeNearestNeighbor([150, 150]) // Match model input size
+            .toFloat()
+            .div(255.0); // Normalize between 0 and 1
+          console.log('Image preprocessed as tensor:', tensor.shape);
+          resolve(tensor);
+        };
+        img.src = url;
+      });
+    }
+
+    // Classify the image
+    async function classifyImage(model, file) {
+      const imageTensor = await preprocessImage(file);
+      const batchedImage = imageTensor.expandDims(0); // Add a batch dimension
+
+      // Get predictions from the model
+      const predictions = model.predict(batchedImage);
+      const predictedClassIndex = predictions.argMax(-1).dataSync()[0]; // Get the highest probability class
+        console.log(predictions);
+      // Map class index back to the class name
+      const predictedClassName = Object.keys(classLabelsMap).find(
+        (key) => classLabelsMap[key] === predictedClassIndex
+      );
+
+      console.log(`Predicted Class: ${predictedClassName}`);
+      return predictedClassName;
+    }
+
+    // Handle file input and classify
+    async function classifyUploadedImage() {
+      const inputElement = document.getElementById("imageUpload");
+      const file = inputElement.files[0];
+
+      if (!file) {
+        alert("Please upload an image");
+        return;
+      }
+
+      const model = await loadModel();
+      const predictedClass = await classifyImage(model, file);
+
+      // Display the predicted class
+      const resultDiv = document.getElementById("result");
+      resultDiv.innerHTML = `The predicted class is: ${predictedClass}`;
+    }
+  </script>
+</body>
+</html>
