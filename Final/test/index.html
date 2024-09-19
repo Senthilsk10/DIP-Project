@@ -36,7 +36,9 @@
     <p id="predictionResult"></p>
 
     <h2>Uploaded Images:</h2>
-    <div id="imageContainers"></div>
+    <div id="imageContainers">
+      <img alt="input image" id="imagePreview" hidden />
+    </div>
 
     <script>
       const MOBILE_NET_INPUT_WIDTH = 224;
@@ -181,6 +183,23 @@
 
         return paramKeysArray;
       }
+
+      const fileInput = document.getElementById("imageUpload");
+      const imagePreview = document.getElementById("imagePreview");
+
+      fileInput.addEventListener("change", function (event) {
+        const file = event.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            // console.log(e.target.result);
+            imagePreview.src = e.target.result;
+            imagePreview.removeAttribute("hidden");
+          };
+
+          reader.readAsDataURL(file);
+        }
+      });
     </script>
   </body>
 </html>
