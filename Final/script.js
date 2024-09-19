@@ -221,12 +221,17 @@ function downloadModel() {
     const button = document.createElement("button");
     button.type = "button"; // Button type is 'button' to prevent form submission
     button.innerText = "Download Model";
+
+    const testUrl = document.createElement('a');
+    testUrl.setAttribute("href",getUrl());
+    testUrl.innerText = "visit testing page";
+    
   
     // Append input and button to the form
     form.appendChild(input);
     form.appendChild(button);
     formContainer.appendChild(form);
-  
+
     // Add event listener to the button
     button.addEventListener("click", async function () {
       const inputValue = document.getElementById("modelInput").value.trim();
@@ -235,7 +240,8 @@ function downloadModel() {
         try {
           // Save the model as a file with the provided name
           await model.save(`downloads://${inputValue}`);
-          alert("Model downloaded successfully!");
+          alert("Model downloaded successfully! , now you can visit the test site for testing your model");
+          form.appendChild(testUrl);
         } catch (error) {
           console.error("Error downloading model:", error);
           alert("Error downloading model.");
@@ -246,3 +252,14 @@ function downloadModel() {
     });
   }
   
+
+function getUrl(){
+  let queryParams = [];
+  CLASS_NAMES.forEach((key, index) => {
+      queryParams.push(`${encodeURIComponent(key)}=${index}`);
+  });
+  const queryString = queryParams.join('&');
+  const finalUrl = `${window.location.href}/test?${queryString}`;
+
+  return finalUrl;
+}
