@@ -180,18 +180,41 @@ async function readImage(file) {
 }
 
 // Train the model with the prepared data
+
 async function trainModel() {
+  const metrics = ['loss', 'acc']; // Metrics to display during training
+  const container = { name: 'Training Performance', tab: 'Training' };
+
+  const fitCallbacks = tfvis.show.fitCallbacks(container, metrics, {
+    callbacks: ['onEpochEnd']
+  });
+
   let results = await model.fit(xs, ys, {
     shuffle: true,
     batchSize: 30,
     epochs: 2,
-    callbacks: { onEpochEnd: logProgress },
+    validationSplit: 0.2, // Add validation split to see validation metrics
+    callbacks: fitCallbacks // Pass fitCallbacks to visualize training progress
   });
-  alert("model trained sucessfully");
+
+  alert("Model trained successfully");
   dwnBtn.attributes.removeNamedItem("disabled");
   xs.dispose();
   ys.dispose();
 }
+
+// async function trainModel() {
+//   let results = await model.fit(xs, ys, {
+//     shuffle: true,
+//     batchSize: 30,
+//     epochs: 2,
+//     callbacks: { onEpochEnd: logProgress },
+//   });
+//   alert("model trained sucessfully");
+//   dwnBtn.attributes.removeNamedItem("disabled");
+//   xs.dispose();
+//   ys.dispose();
+// }
 
 // Log training progress
 function logProgress(epoch, logs) {

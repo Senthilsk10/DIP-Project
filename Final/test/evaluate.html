@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Classification with MobileNet & Custom Model</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis"></script>
+
+    <style>
+      #imageContainers img {
+        width: 100px;
+        height: 100px;
+        object-fit: cover;
+        margin: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Image Classification and Evaluation</h1>
+
+    <!-- Model URL Input -->
+    <label for="modelUrl">Enter Custom Model URL:</label>
+    <input
+      type="text"
+      id="modelUrl"
+      value="https://your-server.com/model/model.json"
+    />
+    <button id="loadModelButton">Load Model</button><br />
+
+    <!-- Image Upload -->
+    <label for="imageUpload">Upload images to test:</label>
+    <input type="file" id="imageUpload" accept="image/*" multiple /><br />
+
+    <button id="evaluateButton" disabled>Evaluate Model</button>
+
+    <h2>Evaluation Results:</h2>
+    <p id="evaluationResult"></p>
+
+    <h2>Confusion Matrix:</h2>
+    <pre id="confusionMatrix"></pre>
+
+    <div id="imageContainers"></div>
+
+    <script>
+
+function getClassNames() {
+          // Create a URL object
+          const urlObj = new URL(window.location.href);
+      
+          // Get search parameters from the URL
+          const searchParams = new URLSearchParams(urlObj.search);
+      
+          // Initialize an empty array to store the keys
+          const paramKeysArray = [];
+      
+          // Iterate over the search parameters and add keys to the array
+          for (const key of searchParams.keys()) {
+            paramKeysArray.push(key);
+          }
+      
+          return paramKeysArray;
+        }
+      const MOBILE_NET_INPUT_WIDTH = 224;
+      const MOBILE_NET_INPUT_HEIGHT = 224;
+      let mobilenet = null;
+      let model = null;
+      const CLASS_NAMES = getClassNames(); // Replace with actual class names
+      const classToIndex = {}; // Class name to index mapping
+      const trueLabels = []; // Store true numeric labels for confusion matrix
+      const predictedLabels = []; // Store predicted numeric labels for confusion matrix
+
+      // Create a mapping from class names to numeric indices
+      function createClassToIndexMap() {
+        CLASS_NAMES.forEach((className, index) => {
+          classToIndex[className] = index;
+        });
+      }
+
+      // Load MobileNet for feature extraction
+      async function loadMobileNetFeatureModel() {
+        const URL =
+          "https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v3_small_100_224/feature_vector/5/default/1";
+        mobilenet = await tf.loadGraphModel(URL, { fromTFHub: true });
+        console.log("MobileNet loaded!");
+      }
+
+      loadMobileNetFeatureModel();
+
+      // Load custom model from URL
+      async function loadModelFromURL() {
+        const modelUrl = document.getElementById("modelUrl").value;
+        if (!modelUrl) {
+          alert("Please enter a valid model URL.");
+          return;
+        }
+        try {
+          model = await tf.loadLayersModel(modelUrl);
+          console.log("Custom Model loaded!");
+          document.getElementById("evaluateButton").disabled = false;
+          createClassToIndexMap(); // Create the class-to-index mapping after loading the model
+        } catch (error) {
+          console.error("Failed to load the model.", error);
+        }
+      }
+
+      document
+        .getElementById("loadModelButton")
+        .addEventListener("click", loadModelFromURL);
+
+      // Function to preprocess and predict image classes
+      async function preprocessAndPredict(file) {
+        const img = document.createElement("img");
+        const url = URL.createObjectURL(file);
+
+        return new Promise((resolve) => {
+          img.onload = () => {
+            let imageFeatures = tf.tidy(() => {
+              let imageTensor = tf.browser.fromPixels(img);
+              let resizedTensor = tf.image.resizeBilinear(imageTensor, [
+                MOBILE_NET_INPUT_HEIGHT,
+                MOBILE_NET_INPUT_WIDTH,
+              ]);
+              let normalizedTensor = resizedTensor.div(255.0);
+
+              // Extract features using MobileNet
+              return mobilenet.predict(normalizedTensor.expandDims()).squeeze(); // Get rid of batch dimension
+            });
+
+            // Predict using custom classification model
+            const prediction = model.predict(imageFeatures.expandDims());
+            prediction.array().then((probs) => {
+              const predictedIndex = tf.argMax(prediction, 1).dataSync()[0];
+              const predictedClass = CLASS_NAMES[predictedIndex];
+              console.log("Predicted Class:", predictedClass);
+              resolve(predictedIndex); // Return the predicted index (label)
+            });
+            imageFeatures.dispose(); // Dispose tensor to free memory
+          };
+          img.src = url;
+        });
+      }
+
+      // Evaluate the model on uploaded images
+      async function evaluateModel() {
+        const inputElement = document.getElementById("imageUpload");
+        const files = inputElement.files;
+
+        if (files.length === 0) {
+          alert("Please upload some images.");
+          return;
+        }
+
+        for (const file of files) {
+          const predictedIndex = await preprocessAndPredict(file);
+          predictedLabels.push(predictedIndex);
+
+          // Assuming all files have a true label in a specific format or inferred from the filename
+          const trueClass = extractTrueLabel(file.name);
+          const trueIndex = classToIndex[trueClass]; // Convert true class to numeric index
+          trueLabels.push(trueIndex);
+        }
+
+        // Calculate confusion matrix
+        const confusionMatrix = tf.math.confusionMatrix(
+          trueLabels,
+          predictedLabels,
+          CLASS_NAMES.length
+        );
+        const confusionMatrixArray = confusionMatrix.arraySync();
+
+        // Visualize Confusion Matrix
+        const data = { values: confusionMatrixArray };
+        const surface = { name: "Confusion Matrix", tab: "Evaluation" };
+        tfvis.render.confusionMatrix(surface, data);
+
+        // Calculate accuracy
+        const correct = predictedLabels.filter(
+          (pred, i) => pred === trueLabels[i]
+        ).length;
+        const accuracy = correct / predictedLabels.length;
+
+        document.getElementById("evaluationResult").innerText =
+          "Accuracy: " + (accuracy * 100).toFixed(2) + "%";
+
+        // Visualize Accuracy
+        tfvis.show.valuesDistribution({ name: "Accuracy", tab: "Evaluation" }, [
+          { accuracy: accuracy },
+        ]);
+
+        console.log("Evaluation complete!");
+      }
+
+      document
+        .getElementById("evaluateButton")
+        .addEventListener("click", evaluateModel);
+
+      // Mock function to extract true label from filename or other data
+      function extractTrueLabel(filename) {
+        // Replace this with actual logic to extract true label from file
+        // Example: parse the filename to infer class, e.g., "cat_1.jpg" -> "cat"
+        return Math.floor(Math.random() * CLASS_NAMES.length);
+      }
+    </script>
+  </body>
+</html>
